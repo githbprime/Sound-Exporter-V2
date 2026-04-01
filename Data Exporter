@@ -1,0 +1,107 @@
+import librosa
+import numpy as np
+import os
+from scipy.ndimage import gaussian_filter1d
+
+def get_inputs():
+    """Handles user inputs for file name and DPS with boundary checks."""
+    while True:
+        filename = input("Enter the name of the .mp3 file (without the .mp3 extension): ").strip()
+        filepath = f"{filename}.mp3"
+        if os.path.exists(filepath):
+            print(f"Found '{filepath}'!")
+            break
+        else:
+            print(f"Error: Could not find '{filepath}'. Please check the name and try again.")
+
+    while True:
+        dps_input = input("Enter DPS (Data Per Second) [Default is 30]: ").strip()
+        if not dps_input:
+            dps = 30
+            break
+        try:
+            dps = int(dps_input)
+            if 1 <= dps <= 999:
+                break
+            else:
+                print("Error: DPS must be between 1 and 999.")
+        except ValueError:
+            print("Error: Please enter a valid whole number.")
+            
+    return filepath, filename, dps
+
+def process_audio(filepath, dps):
+    """Processes the audio into 200 frequency bins normalized to 0-100 loudness with smoothing."""
+    print("Loading and analyzing audio...")
+    
+    # Load audio at 16kHz. This caps the max frequency at 8,000Hz.
+    target_sr = 16000
+    y, sr = librosa.load(filepath, sr=target_sr)
+
+    # Apply a pre-emphasis filter to balance high/low frequencies.
+    y = librosa.effects.preemphasis(y)
+
+    # Calculate hop_length to ensure exactly 'dps' slices per second
+    hop_length = sr // dps
+
+    # Generate the Spectrogram
+    n_fft = 2048
+    S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))
+
+    # Convert amplitude to Decibels
+    S_db = librosa.amplitude_to_db(S, ref=np.max)
+
+    # Normalize the dB scale (-80dB to 0dB) to a 0-100 integer scale
+    S_norm = np.clip((S_db + 80) * (100 / 80), 0, 100)
+
+    # Apply Gaussian smoothing across the TIME axis with variable smoothing via input
+    smooth_factor = input("Enter smoothing value (Lower is snappier, higher is smoother. Default is 1.0): ").strip()
+    S_smooth = gaussian_filter1d(S_norm, sigma=smooth_factor, axis=1)
+
+    # Compress the 1025 original frequency bins into 200 target bins
+    num_original_bins = S_smooth.shape[0]
+    num_target_bins = 200
+    S_binned = np.zeros((num_target_bins, S_smooth.shape[1]))
+
+    # Create boundaries to average the 1025 bins evenly into 200 chunks
+    bin_edges = np.linspace(0, num_original_bins - 1, num_target_bins + 1).astype(int)
+
+    for i in range(num_target_bins):
+        start = bin_edges[i]
+        end = bin_edges[i+1]
+        if start == end:
+            end += 1 
+        S_binned[i, :] = np.mean(S_smooth[start:end, :], axis=0)
+
+    # Convert to whole integers and clip for safety
+    S_int = np.round(S_binned).astype(int)
+    S_int = np.clip(S_int, 0, 100)
+    
+    return S_int
+
+def generate_and_save_code(S_int, dps, filename):
+    """Formats the data into the requested string and saves to .txt"""
+    print("Generating export code...")
+    
+    # Start the string with the 3-digit DPS
+    code_chunks = [f"{dps:03d}"]
+    num_frames = S_int.shape[1]
+    
+    for t in range(num_frames):
+        # Iterate through all 200 frequency bins
+        for f in range(200):
+            loudness_val = S_int[f, t]
+            code_chunks.append(f"{loudness_val:03d}")
+
+    final_code = "".join(code_chunks)
+    
+    output_filename = f"{filename}_data.txt"
+    with open(output_filename, "w") as f:
+        f.write(final_code)
+        
+    print(f"Success! The code (with 200 frequency bins) has been exported to '{output_filename}'.")
+
+if __name__ == "__main__":
+    filepath, filename, dps = get_inputs()
+    audio_data = process_audio(filepath, dps)
+    generate_and_save_code(audio_data, dps, filename)
