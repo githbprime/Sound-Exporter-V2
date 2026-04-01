@@ -54,9 +54,8 @@ def process_audio(filepath, dps):
     # Normalize the dB scale (-80dB to 0dB) to a 0-100 integer scale
     S_norm = np.clip((S_db + 80) * (100 / 80), 0, 100)
 
-    # Apply Gaussian smoothing across the TIME axis with variable smoothing via input
-    smooth_factor = input("Enter smoothing value (Lower is snappier, higher is smoother. Default is 1.0): ").strip()
-    S_smooth = gaussian_filter1d(S_norm, sigma=smooth_factor, axis=1)
+    # Apply Gaussian smoothing across the TIME axis
+    S_smooth = gaussian_filter1d(S_norm, sigma=1.0, axis=1)
 
     # Compress the 1025 original frequency bins into 200 target bins
     num_original_bins = S_smooth.shape[0]
