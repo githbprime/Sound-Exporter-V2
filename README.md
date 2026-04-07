@@ -5,3 +5,5 @@ Visualizer:
 https://scratch.mit.edu/projects/1298285439/
 
 Instructions to use it are in the link.
+
+As for the script, make sure to install lbriosa into your environment before trying to import it. If you are using colab or kaggle or any VM environment, it's likely already installed.
